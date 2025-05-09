@@ -72,7 +72,6 @@
             gap: 5px;
             margin-top: 20px;
             max-width: 600px;
-            display: none;
         }
         .key {
             background: #333;
@@ -86,12 +85,14 @@
         .key:active {
             background: #555;
         }
-        @media (max-width: 768px) {
+        @media (hover: hover) {
+            #virtualKeyboard {
+                display: none;
+            }
+        }
+        @media (hover: none) {
             #virtualKeyboard {
                 display: grid;
-            }
-            #inputDisplay {
-                font-size: 1.8em;
             }
         }
         #setup {
@@ -133,8 +134,7 @@
         let startTime;
         let userInput = '';
         let correctWords = JSON.parse(localStorage.getItem('correctWords')) || [];
-        let wrongWords = [];
-        let currentWordId = 0;
+        let currentWordId = localStorage.getItem('lastWordId') || 1;
 
         const stats = {
             right: 0,
@@ -175,12 +175,10 @@
             display.textContent = userInput;
         }
 
-        // 发音功能
         function playPronunciation(word) {
             try {
                 const audio = new Audio(`https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}`);
                 audio.play().catch(() => {
-                    // 处理自动播放限制
                     document.addEventListener('click', () => audio.play(), { once: true });
                 });
             } catch (e) {
@@ -193,6 +191,7 @@
                 const response = await fetch('cet4_sorted.json');
                 wordList = await response.json();
                 document.getElementById('setup').style.display = 'block';
+                document.getElementById('startId').value = currentWordId;
                 initVirtualKeyboard();
             } catch (error) {
                 alert('无法加载单词数据，请检查cet4_sorted.json是否存在');
@@ -206,7 +205,7 @@
 
         function startTest() {
             const count = parseInt(document.getElementById('wordCount').value);
-            const startId = parseInt(document.getElementById('startId').value) || 1;
+            let startId = parseInt(document.getElementById('startId').value) || currentWordId;
             
             let startIndex = findWordIndexById(startId);
             if(startIndex === -1) {
@@ -227,7 +226,6 @@
             currentIndex = 0;
             stats.right = 0;
             stats.wrong = 0;
-            wrongWords = [];
             startTime = Date.now();
             userInput = '';
             
@@ -246,6 +244,7 @@
         function showNextWord() {
             const currentWord = currentTest[currentIndex];
             currentWordId = currentWord.id;
+            localStorage.setItem('lastWordId', currentWordId);
             document.getElementById('currentId').textContent = currentWordId;
             document.getElementById('inputDisplay').textContent = '';
             document.getElementById('inputDisplay').className = '';
@@ -280,7 +279,6 @@
             const userAnswer = userInput.toLowerCase();
             const isCorrect = userAnswer === correct;
 
-            // 播放发音
             playPronunciation(currentWord.word);
 
             if (isCorrect) {
@@ -316,7 +314,6 @@
 
         function handleWrongAnswer(word) {
             stats.wrong++;
-            // 将错词添加到队列末尾
             currentTest.push(JSON.parse(JSON.stringify(word)));
             document.getElementById('totalTestCount').textContent = currentTest.length;
         }
