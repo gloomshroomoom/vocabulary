@@ -57,17 +57,60 @@
             color: white;
             cursor: pointer;
         }
+        #statusPanel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+        }
+        #virtualKeyboard {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 5px;
+            margin-top: 20px;
+            max-width: 600px;
+            display: none;
+        }
+        .key {
+            background: #333;
+            padding: 12px;
+            text-align: center;
+            border-radius: 5px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+        .key:active {
+            background: #555;
+        }
+        @media (max-width: 768px) {
+            #virtualKeyboard {
+                display: grid;
+            }
+            #inputDisplay {
+                font-size: 1.8em;
+            }
+        }
         #setup {
             text-align: center;
         }
         input[type="number"] {
             padding: 8px;
             font-size: 1.1em;
-            margin-right: 10px;
+            margin: 5px;
+            width: 120px;
         }
     </style>
 </head>
 <body>
+    <div id="statusPanel">
+        <div>当前ID: <span id="currentId">-</span></div>
+        <input type="number" id="startId" placeholder="起始ID" min="1">
+    </div>
+    
     <div class="container">
         <h1>单词拼写</h1>
         <div id="setup">
@@ -81,6 +124,8 @@
         </div>
     </div>
 
+    <div id="virtualKeyboard"></div>
+
     <script>
         let wordList = [];
         let currentTest = [];
@@ -89,6 +134,7 @@
         let userInput = '';
         let correctWords = JSON.parse(localStorage.getItem('correctWords')) || [];
         let wrongWords = [];
+        let currentWordId = 0;
 
         const stats = {
             right: 0,
@@ -99,28 +145,80 @@
             }
         };
 
+        // 初始化虚拟键盘
+        function initVirtualKeyboard() {
+            const keyboard = document.getElementById('virtualKeyboard');
+            const layout = [
+                'q','w','e','r','t','y','u','i','o','p',
+                'a','s','d','f','g','h','j','k','l','⌫',
+                'z','x','c','v','b','n','m','↵'
+            ];
+
+            layout.forEach(key => {
+                const keyDiv = document.createElement('div');
+                keyDiv.className = 'key';
+                keyDiv.textContent = key;
+                keyDiv.addEventListener('click', () => handleVirtualKey(key));
+                keyboard.appendChild(keyDiv);
+            });
+        }
+
+        function handleVirtualKey(key) {
+            const display = document.getElementById('inputDisplay');
+            if(key === '⌫') {
+                userInput = userInput.slice(0, -1);
+            } else if(key === '↵') {
+                checkAnswer();
+            } else {
+                userInput += key;
+            }
+            display.textContent = userInput;
+        }
+
+        // 发音功能
+        function playPronunciation(word) {
+            try {
+                const audio = new Audio(`https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}`);
+                audio.play().catch(() => {
+                    // 处理自动播放限制
+                    document.addEventListener('click', () => audio.play(), { once: true });
+                });
+            } catch (e) {
+                console.error('发音播放失败:', e);
+            }
+        }
+
         async function loadData() {
             try {
                 const response = await fetch('cet4_sorted.json');
                 wordList = await response.json();
                 document.getElementById('setup').style.display = 'block';
+                initVirtualKeyboard();
             } catch (error) {
                 alert('无法加载单词数据，请检查cet4_sorted.json是否存在');
                 console.error('数据加载错误:', error);
             }
         }
 
+        function findWordIndexById(id) {
+            return wordList.findIndex(word => word.id === parseInt(id));
+        }
+
         function startTest() {
             const count = parseInt(document.getElementById('wordCount').value);
-            if (!count || count < 1) {
-                alert('请输入有效的数量');
+            const startId = parseInt(document.getElementById('startId').value) || 1;
+            
+            let startIndex = findWordIndexById(startId);
+            if(startIndex === -1) {
+                alert('无效的起始ID');
                 return;
             }
 
             currentTest = wordList
+                .slice(startIndex)
                 .filter(word => !correctWords.includes(word.word))
                 .slice(0, count);
-            
+
             if (currentTest.length === 0) {
                 alert('恭喜！所有单词已掌握。');
                 return;
@@ -147,10 +245,12 @@
 
         function showNextWord() {
             const currentWord = currentTest[currentIndex];
-            document.getElementById('translation').textContent = currentWord.translate;
+            currentWordId = currentWord.id;
+            document.getElementById('currentId').textContent = currentWordId;
             document.getElementById('inputDisplay').textContent = '';
             document.getElementById('inputDisplay').className = '';
             userInput = '';
+            document.getElementById('translation').textContent = currentWord.translate;
         }
 
         function handleKeyPress(e) {
@@ -167,7 +267,6 @@
                 return;
             }
 
-            // 允许输入任意字符
             if (e.key.length === 1) {
                 userInput += e.key;
                 display.textContent = userInput;
@@ -181,11 +280,14 @@
             const userAnswer = userInput.toLowerCase();
             const isCorrect = userAnswer === correct;
 
+            // 播放发音
+            playPronunciation(currentWord.word);
+
             if (isCorrect) {
                 display.classList.add('correct');
             } else {
                 display.classList.add('wrong');
-                display.textContent = currentWord.word; // 显示正确答案
+                display.textContent = currentWord.word;
                 display.title = `你的输入：${userInput}`;
             }
 
@@ -214,7 +316,7 @@
 
         function handleWrongAnswer(word) {
             stats.wrong++;
-            // 将错词添加到队列末尾并更新总数显示
+            // 将错词添加到队列末尾
             currentTest.push(JSON.parse(JSON.stringify(word)));
             document.getElementById('totalTestCount').textContent = currentTest.length;
         }
@@ -246,11 +348,13 @@
                     <p>正确数：${stats.right}</p>
                     <p>错误数：${stats.wrong}</p>
                     <p>准确率：${stats.acc}%</p>
+                    <p>最后ID：${currentWordId}</p>
                     <button onclick="location.reload()">重新开始</button>
                 </div>
             `;
         }
 
+        // 初始化
         loadData();
         document.getElementById('startButton').addEventListener('click', startTest);
     </script>
