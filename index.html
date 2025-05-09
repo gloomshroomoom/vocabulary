@@ -72,6 +72,8 @@
             gap: 5px;
             margin-top: 20px;
             max-width: 600px;
+            width: 100%;
+            display: none;
         }
         .key {
             background: #333;
@@ -85,15 +87,18 @@
         .key:active {
             background: #555;
         }
-        @media (hover: hover) {
-            #virtualKeyboard {
-                display: none;
-            }
-        }
-        @media (hover: none) {
+        @media (max-width: 768px) {
             #virtualKeyboard {
                 display: grid;
             }
+            .key {
+                padding: 15px;
+                font-size: 1.2em;
+            }
+        }
+        .control-key {
+            grid-column: span 2;
+            background: #444;
         }
         #setup {
             text-align: center;
@@ -145,39 +150,49 @@
             }
         };
 
-        // 初始化虚拟键盘
+        // 初始化虚拟键盘（26键布局）
         function initVirtualKeyboard() {
             const keyboard = document.getElementById('virtualKeyboard');
             const layout = [
                 'q','w','e','r','t','y','u','i','o','p',
-                'a','s','d','f','g','h','j','k','l','⌫',
-                'z','x','c','v','b','n','m','↵'
+                'a','s','d','f','g','h','j','k','l',
+                'z','x','c','v','b','n','m'
             ];
 
+            // 添加字母键
             layout.forEach(key => {
                 const keyDiv = document.createElement('div');
                 keyDiv.className = 'key';
                 keyDiv.textContent = key;
-                keyDiv.addEventListener('click', () => handleVirtualKey(key));
+                keyDiv.addEventListener('click', () => {
+                    userInput += key;
+                    document.getElementById('inputDisplay').textContent = userInput;
+                });
                 keyboard.appendChild(keyDiv);
             });
-        }
 
-        function handleVirtualKey(key) {
-            const display = document.getElementById('inputDisplay');
-            if(key === '⌫') {
+            // 添加控制键
+            const backspace = document.createElement('div');
+            backspace.className = 'key control-key';
+            backspace.textContent = '⌫';
+            backspace.addEventListener('click', () => {
                 userInput = userInput.slice(0, -1);
-            } else if(key === '↵') {
-                checkAnswer();
-            } else {
-                userInput += key;
-            }
-            display.textContent = userInput;
+                document.getElementById('inputDisplay').textContent = userInput;
+            });
+            keyboard.appendChild(backspace);
+
+            const enter = document.createElement('div');
+            enter.className = 'key control-key';
+            enter.textContent = '↵';
+            enter.addEventListener('click', checkAnswer);
+            keyboard.appendChild(enter);
         }
 
+        // 加速发音功能
         function playPronunciation(word) {
             try {
-                const audio = new Audio(`https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}`);
+                const audio = new Audio(`https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&speed=2`);
+                audio.playbackRate = 1.5;
                 audio.play().catch(() => {
                     document.addEventListener('click', () => audio.play(), { once: true });
                 });
@@ -205,13 +220,10 @@
 
         function startTest() {
             const count = parseInt(document.getElementById('wordCount').value);
-            let startId = parseInt(document.getElementById('startId').value) || currentWordId;
+            const startId = parseInt(document.getElementById('startId').value) || currentWordId;
             
             let startIndex = findWordIndexById(startId);
-            if(startIndex === -1) {
-                alert('无效的起始ID');
-                return;
-            }
+            if(startIndex === -1) startIndex = 0;
 
             currentTest = wordList
                 .slice(startIndex)
@@ -253,8 +265,6 @@
         }
 
         function handleKeyPress(e) {
-            const display = document.getElementById('inputDisplay');
-            
             if (e.key === 'Enter') {
                 checkAnswer();
                 return;
@@ -262,13 +272,13 @@
 
             if (e.key === 'Backspace') {
                 userInput = userInput.slice(0, -1);
-                display.textContent = userInput;
+                document.getElementById('inputDisplay').textContent = userInput;
                 return;
             }
 
-            if (e.key.length === 1) {
+            if (e.key.length === 1 && e.key.match(/^[a-zA-Z]$/)) {
                 userInput += e.key;
-                display.textContent = userInput;
+                document.getElementById('inputDisplay').textContent = userInput;
             }
         }
 
@@ -294,39 +304,27 @@
                 display.title = '';
 
                 if (isCorrect) {
-                    handleCorrectAnswer(currentWord);
+                    stats.right++;
+                    if (!correctWords.includes(currentWord.word)) {
+                        correctWords.push(currentWord.word);
+                        localStorage.setItem('correctWords', JSON.stringify(correctWords));
+                    }
+                    currentIndex++;
                 } else {
-                    handleWrongAnswer(currentWord);
+                    stats.wrong++;
+                    currentTest.push(JSON.parse(JSON.stringify(currentWord)));
+                    document.getElementById('totalTestCount').textContent = currentTest.length;
                 }
 
-                proceedToNext();
+                updateStats();
+                
+                if (currentIndex < currentTest.length) {
+                    showNextWord();
+                } else {
+                    showFinalResult();
+                    document.removeEventListener('keydown', handleKeyPress);
+                }
             }, 1200);
-        }
-
-        function handleCorrectAnswer(word) {
-            stats.right++;
-            if (!correctWords.includes(word.word)) {
-                correctWords.push(word.word);
-                localStorage.setItem('correctWords', JSON.stringify(correctWords));
-            }
-            currentIndex++;
-        }
-
-        function handleWrongAnswer(word) {
-            stats.wrong++;
-            currentTest.push(JSON.parse(JSON.stringify(word)));
-            document.getElementById('totalTestCount').textContent = currentTest.length;
-        }
-
-        function proceedToNext() {
-            updateStats();
-            
-            if (currentIndex < currentTest.length) {
-                showNextWord();
-            } else {
-                showFinalResult();
-                document.removeEventListener('keydown', handleKeyPress);
-            }
         }
 
         function updateStats() {
