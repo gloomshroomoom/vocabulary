@@ -42,6 +42,7 @@
         #translation {
             font-size: 1.5em;
             margin: 30px 0;
+            min-height: 2em;
         }
         .stats {
             font-size: 1.1em;
@@ -56,13 +57,21 @@
             color: white;
             cursor: pointer;
         }
+        #setup {
+            text-align: center;
+        }
+        input[type="number"] {
+            padding: 8px;
+            font-size: 1.1em;
+            margin-right: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>单词拼写</h1>
         <div id="setup">
-            <input type="number" id="wordCount" placeholder="输入测试数量" min="1">
+            <input type="number" id="wordCount" placeholder="测试数量" min="1">
             <button id="startButton">开始测试</button>
         </div>
         <div class="stats" id="stats"></div>
@@ -158,9 +167,9 @@
                 return;
             }
 
-            // 严格过滤输入（仅允许字母）
-            if (e.key.length === 1 && e.key.match(/^[a-zA-Z]$/)) {
-                userInput += e.key.toLowerCase();
+            // 允许输入任意字符
+            if (e.key.length === 1) {
+                userInput += e.key;
                 display.textContent = userInput;
             }
         }
@@ -169,14 +178,15 @@
             const display = document.getElementById('inputDisplay');
             const currentWord = currentTest[currentIndex];
             const correct = currentWord.word.toLowerCase();
-            const isCorrect = userInput === correct;
+            const userAnswer = userInput.toLowerCase();
+            const isCorrect = userAnswer === correct;
 
             if (isCorrect) {
                 display.classList.add('correct');
             } else {
                 display.classList.add('wrong');
-                display.textContent = correct; // 显示正确答案
-                display.title = `你的输入：${userInput}`; // 鼠标悬停显示用户输入
+                display.textContent = currentWord.word; // 显示正确答案
+                display.title = `你的输入：${userInput}`;
             }
 
             setTimeout(() => {
@@ -204,24 +214,15 @@
 
         function handleWrongAnswer(word) {
             stats.wrong++;
-            // 将错词添加到队列末尾（去重处理）
-            if (!wrongWords.some(w => w.word === word.word)) {
-                wrongWords.push({...word});
-                currentTest.push({...word});
-            }
+            // 将错词添加到队列末尾并更新总数显示
+            currentTest.push(JSON.parse(JSON.stringify(word)));
+            document.getElementById('totalTestCount').textContent = currentTest.length;
         }
 
         function proceedToNext() {
             updateStats();
             
             if (currentIndex < currentTest.length) {
-                showNextWord();
-            } else if (wrongWords.length > 0) {
-                // 开始重试错词
-                currentTest = [...wrongWords];
-                currentIndex = 0;
-                wrongWords = [];
-                document.getElementById('totalTestCount').textContent = currentTest.length;
                 showNextWord();
             } else {
                 showFinalResult();
