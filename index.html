@@ -73,7 +73,6 @@
             margin-top: 20px;
             max-width: 600px;
             width: 100%;
-            display: none;
         }
         .key {
             background: #333;
@@ -87,17 +86,8 @@
         .key:active {
             background: #555;
         }
-        @media (max-width: 768px) {
-            #virtualKeyboard {
-                display: grid;
-            }
-            .key {
-                padding: 15px;
-                font-size: 1.2em;
-            }
-        }
         .control-key {
-            grid-column: span 2;
+            grid-column: span 3;
             background: #444;
         }
         #setup {
@@ -130,6 +120,7 @@
         </div>
     </div>
 
+    <!-- 固定显示的虚拟键盘 -->
     <div id="virtualKeyboard"></div>
 
     <script>
@@ -150,25 +141,21 @@
             }
         };
 
-        // 初始化虚拟键盘（26键布局）
+        // 初始化虚拟键盘（完整26键）
         function initVirtualKeyboard() {
             const keyboard = document.getElementById('virtualKeyboard');
-            const layout = [
-                'q','w','e','r','t','y','u','i','o','p',
-                'a','s','d','f','g','h','j','k','l',
-                'z','x','c','v','b','n','m'
-            ];
-
+            const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
+            
             // 添加字母键
-            layout.forEach(key => {
-                const keyDiv = document.createElement('div');
-                keyDiv.className = 'key';
-                keyDiv.textContent = key;
-                keyDiv.addEventListener('click', () => {
-                    userInput += key;
+            letters.forEach(letter => {
+                const key = document.createElement('div');
+                key.className = 'key';
+                key.textContent = letter;
+                key.addEventListener('click', () => {
+                    userInput += letter;
                     document.getElementById('inputDisplay').textContent = userInput;
                 });
-                keyboard.appendChild(keyDiv);
+                keyboard.appendChild(key);
             });
 
             // 添加控制键
@@ -188,16 +175,16 @@
             keyboard.appendChild(enter);
         }
 
-        // 加速发音功能
+        // 发音功能（加速版）
         function playPronunciation(word) {
             try {
-                const audio = new Audio(`https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&speed=2`);
+                const audio = new Audio(`https://dict.youdao.com/dictvoice?audio=${word}&speed=2`);
                 audio.playbackRate = 1.5;
                 audio.play().catch(() => {
                     document.addEventListener('click', () => audio.play(), { once: true });
                 });
             } catch (e) {
-                console.error('发音播放失败:', e);
+                console.error('发音失败:', e);
             }
         }
 
@@ -209,7 +196,7 @@
                 document.getElementById('startId').value = currentWordId;
                 initVirtualKeyboard();
             } catch (error) {
-                alert('无法加载单词数据，请检查cet4_sorted.json是否存在');
+                alert('无法加载单词数据');
                 console.error('数据加载错误:', error);
             }
         }
@@ -231,7 +218,7 @@
                 .slice(0, count);
 
             if (currentTest.length === 0) {
-                alert('恭喜！所有单词已掌握。');
+                alert('已掌握所有单词！');
                 return;
             }
 
@@ -276,8 +263,8 @@
                 return;
             }
 
-            if (e.key.length === 1 && e.key.match(/^[a-zA-Z]$/)) {
-                userInput += e.key;
+            if (e.key.match(/^[a-zA-Z]$/)) {
+                userInput += e.key.toLowerCase();
                 document.getElementById('inputDisplay').textContent = userInput;
             }
         }
@@ -286,36 +273,30 @@
             const display = document.getElementById('inputDisplay');
             const currentWord = currentTest[currentIndex];
             const correct = currentWord.word.toLowerCase();
-            const userAnswer = userInput.toLowerCase();
-            const isCorrect = userAnswer === correct;
+            const isCorrect = userInput === correct;
 
             playPronunciation(currentWord.word);
 
             if (isCorrect) {
                 display.classList.add('correct');
+                stats.right++;
+                if (!correctWords.includes(currentWord.word)) {
+                    correctWords.push(currentWord.word);
+                    localStorage.setItem('correctWords', JSON.stringify(correctWords));
+                }
+                currentIndex++;
             } else {
                 display.classList.add('wrong');
+                stats.wrong++;
                 display.textContent = currentWord.word;
-                display.title = `你的输入：${userInput}`;
+                display.title = `输入：${userInput}`;
+                currentTest.push(JSON.parse(JSON.stringify(currentWord)));
+                document.getElementById('totalTestCount').textContent = currentTest.length;
             }
 
             setTimeout(() => {
                 display.classList.remove('correct', 'wrong');
                 display.title = '';
-
-                if (isCorrect) {
-                    stats.right++;
-                    if (!correctWords.includes(currentWord.word)) {
-                        correctWords.push(currentWord.word);
-                        localStorage.setItem('correctWords', JSON.stringify(correctWords));
-                    }
-                    currentIndex++;
-                } else {
-                    stats.wrong++;
-                    currentTest.push(JSON.parse(JSON.stringify(currentWord)));
-                    document.getElementById('totalTestCount').textContent = currentTest.length;
-                }
-
                 updateStats();
                 
                 if (currentIndex < currentTest.length) {
@@ -338,10 +319,10 @@
             const elapsed = Math.floor((Date.now() - startTime) / 1000);
             document.getElementById('testArea').innerHTML = `
                 <div style="text-align: center; margin-top: 50px">
-                    <h2>测试完成！</h2>
-                    <p>总耗时：${elapsed}秒</p>
-                    <p>正确数：${stats.right}</p>
-                    <p>错误数：${stats.wrong}</p>
+                    <h2>测试完成</h2>
+                    <p>耗时：${elapsed}秒</p>
+                    <p>正确：${stats.right}</p>
+                    <p>错误：${stats.wrong}</p>
                     <p>准确率：${stats.acc}%</p>
                     <p>最后ID：${currentWordId}</p>
                     <button onclick="location.reload()">重新开始</button>
