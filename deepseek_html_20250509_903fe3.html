@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>单词拼写测试</title>
+    <!-- 样式部分保持不变 -->
+</head>
+<body>
+    <div class="container">
+        <h1>单词拼写测试</h1>
+        <div id="setup">
+            <input type="number" id="wordCount" placeholder="输入测试数量" min="1">
+            <button id="startButton">开始测试</button>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div id="testArea"></div>
+    </div>
+
+    <script>
+        let wordList = [];
+        let currentTest = [];
+        let currentIndex = 0;
+        let startTime;
+        let correctWords = JSON.parse(localStorage.getItem('correctWords')) || [];
+        let wrongWordsInCurrentRound = [];
+        let stats = {
+            right: 0,
+            wrong: 0,
+            get acc() {
+                return this.right + this.wrong === 0 ? 0 : 
+                    Math.round((this.right / (this.right + this.wrong)) * 100);
+            }
+        };
+
+        async function loadData() {
+            try {
+                const response = await fetch('cet4_sorted.json');
+                wordList = await response.json();
+                document.getElementById('setup').style.display = 'block';
+            } catch (error) {
+                alert('无法加载单词数据，请检查cet4_sorted.json是否存在');
+                console.error('数据加载错误:', error);
+            }
+        }
+
+        function startTest() {
+            const count = parseInt(document.getElementById('wordCount').value);
+            if (!count || count < 1) {
+                alert('请输入有效的数量');
+                return;
+            }
+
+            const remainingWords = wordList.filter(word => !correctWords.includes(word.word));
+            if (remainingWords.length === 0) {
+                alert('恭喜！所有单词已掌握。');
+                return;
+            }
+
+            currentTest = remainingWords.sort(() => Math.random() - 0.5).slice(0, count);
+            currentIndex = 0;
+            stats = { right: 0, wrong: 0 };
+            startTime = Date.now();
+            wrongWordsInCurrentRound = [];
+            
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('stats').innerHTML = `
+                已测试：<span id="current">0</span>/<span id="totalTestCount">${currentTest.length}</span> | 
+                正确：<span id="right">0</span> | 
+                错误：<span id="wrong">0</span> | 
+                准确率：<span id="acc">0</span>%
+            `;
+
+            showNextWord();
+        }
+
+        function showNextWord() {
+            const word = currentTest[currentIndex];
+            const html = `
+                <div id="question">
+                    <h2>中文释义：</h2>
+                    <p style="font-size: 1.5em">${word.translate}</p>
+                    <input type="text" id="answer" autofocus placeholder="输入英文单词">
+                    <button onclick="checkAnswer()">提交</button>
+                </div>
+            `;
+            
+            document.getElementById('testArea').innerHTML = html;
+            document.getElementById('answer').addEventListener('keypress', (e) => {
+                if(e.key === 'Enter') checkAnswer();
+            });
+        }
+
+        function checkAnswer() {
+            const answer = document.getElementById('answer').value.trim().toLowerCase();
+            const currentWord = currentTest[currentIndex];
+            const correct = currentWord.word.toLowerCase();
+            const isCorrect = answer === correct;
+            const feedback = document.createElement('div');
+            
+            if (isCorrect) {
+                if (!correctWords.includes(currentWord.word)) {
+                    correctWords.push(currentWord.word);
+                    localStorage.setItem('correctWords', JSON.stringify(correctWords));
+                }
+                stats.right++;
+                feedback.className = 'feedback correct';
+                feedback.innerHTML = `
+                    <h3>√ 正确！</h3>
+                    <p>正确答案：${correct}</p>
+                `;
+            } else {
+                wrongWordsInCurrentRound.push(currentWord);
+                stats.wrong++;
+                feedback.className = 'feedback wrong';
+                feedback.innerHTML = `
+                    <h3>× 错误</h3>
+                    <p>你的答案：${answer}</p>
+                    <p>正确答案：${correct}</p>
+                `;
+            }
+
+            document.getElementById('question').replaceWith(feedback);
+            updateStats();
+
+            setTimeout(() => {
+                currentIndex++;
+                if(currentIndex < currentTest.length) {
+                    showNextWord();
+                } else {
+                    if (wrongWordsInCurrentRound.length > 0) {
+                        currentTest = [...wrongWordsInCurrentRound];
+                        currentIndex = 0;
+                        wrongWordsInCurrentRound = [];
+                        document.getElementById('totalTestCount').textContent = currentTest.length;
+                        document.getElementById('current').textContent = 0;
+                        showNextWord();
+                    } else {
+                        showFinalResult();
+                    }
+                }
+            }, 1500);
+        }
+
+        function updateStats() {
+            document.getElementById('current').textContent = currentIndex + 1;
+            document.getElementById('right').textContent = stats.right;
+            document.getElementById('wrong').textContent = stats.wrong;
+            document.getElementById('acc').textContent = stats.acc;
+        }
+
+        function showFinalResult() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            document.getElementById('testArea').innerHTML = `
+                <div style="margin-top: 50px">
+                    <h2>测试完成！</h2>
+                    <p>总耗时：${elapsed}秒</p>
+                    <p>正确数：${stats.right}</p>
+                    <p>错误数：${stats.wrong}</p>
+                    <p>准确率：${stats.acc}%</p>
+                    <button onclick="location.reload()">重新开始</button>
+                </div>
+            `;
+        }
+
+        loadData();
+        document.getElementById('startButton').addEventListener('click', startTest);
+    </script>
+</body>
+</html>
