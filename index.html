@@ -4,24 +4,154 @@
     <meta charset="UTF-8">
     <title>单词拼写</title>
     <style>
-        /* 保持原有样式不变，新增输入提示样式 */
-        #inputDisplay.correct { color: #2ecc71; }
-        #inputDisplay.wrong { color: #e74c3c; }
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+        }
+        #inputDisplay {
+            font-size: 2em;
+            min-height: 1.5em;
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 5px;
+            transition: all 0.3s;
+            border: 2px solid #444;
+        }
+        #inputDisplay.correct {
+            background: #2ecc71;
+            color: white;
+        }
+        #inputDisplay.wrong {
+            background: #e74c3c;
+            color: white;
+        }
+        #translation {
+            font-size: 1.5em;
+            margin: 30px 0;
+        }
+        .stats {
+            font-size: 1.1em;
+            margin: 20px 0;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            background: #3498db;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
-    <!-- 保持原有HTML结构不变 -->
+    <div class="container">
+        <h1>单词拼写</h1>
+        <div id="setup">
+            <input type="number" id="wordCount" placeholder="输入测试数量" min="1">
+            <button id="startButton">开始测试</button>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div id="testArea">
+            <div id="translation"></div>
+            <div id="inputDisplay"></div>
+        </div>
+    </div>
 
     <script>
-        // 修改后的核心逻辑
+        let wordList = [];
+        let currentTest = [];
+        let currentIndex = 0;
+        let startTime;
+        let userInput = '';
+        let correctWords = JSON.parse(localStorage.getItem('correctWords')) || [];
+        let wrongWords = [];
+
+        const stats = {
+            right: 0,
+            wrong: 0,
+            get acc() {
+                return this.right + this.wrong === 0 ? 0 : 
+                    Math.round((this.right / (this.right + this.wrong)) * 100);
+            }
+        };
+
+        async function loadData() {
+            try {
+                const response = await fetch('cet4_sorted.json');
+                wordList = await response.json();
+                document.getElementById('setup').style.display = 'block';
+            } catch (error) {
+                alert('无法加载单词数据，请检查cet4_sorted.json是否存在');
+                console.error('数据加载错误:', error);
+            }
+        }
+
+        function startTest() {
+            const count = parseInt(document.getElementById('wordCount').value);
+            if (!count || count < 1) {
+                alert('请输入有效的数量');
+                return;
+            }
+
+            currentTest = wordList
+                .filter(word => !correctWords.includes(word.word))
+                .slice(0, count);
+            
+            if (currentTest.length === 0) {
+                alert('恭喜！所有单词已掌握。');
+                return;
+            }
+
+            currentIndex = 0;
+            stats.right = 0;
+            stats.wrong = 0;
+            wrongWords = [];
+            startTime = Date.now();
+            userInput = '';
+            
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('stats').innerHTML = `
+                进度：<span id="current">0</span>/<span id="totalTestCount">${currentTest.length}</span> | 
+                正确：<span id="right">0</span> | 
+                错误：<span id="wrong">0</span> | 
+                准确率：<span id="acc">0</span>%
+            `;
+
+            showNextWord();
+            document.addEventListener('keydown', handleKeyPress);
+        }
+
+        function showNextWord() {
+            const currentWord = currentTest[currentIndex];
+            document.getElementById('translation').textContent = currentWord.translate;
+            document.getElementById('inputDisplay').textContent = '';
+            document.getElementById('inputDisplay').className = '';
+            userInput = '';
+        }
+
         function handleKeyPress(e) {
             const display = document.getElementById('inputDisplay');
             
-            // 处理特殊按键
             if (e.key === 'Enter') {
                 checkAnswer();
                 return;
             }
+
             if (e.key === 'Backspace') {
                 userInput = userInput.slice(0, -1);
                 display.textContent = userInput;
@@ -41,13 +171,12 @@
             const correct = currentWord.word.toLowerCase();
             const isCorrect = userInput === correct;
 
-            // 显示正确答案（错误时）
-            if (!isCorrect) {
+            if (isCorrect) {
+                display.classList.add('correct');
+            } else {
                 display.classList.add('wrong');
                 display.textContent = correct; // 显示正确答案
                 display.title = `你的输入：${userInput}`; // 鼠标悬停显示用户输入
-            } else {
-                display.classList.add('correct');
             }
 
             setTimeout(() => {
@@ -61,7 +190,7 @@
                 }
 
                 proceedToNext();
-            }, 1200); // 延长显示时间
+            }, 1200);
         }
 
         function handleCorrectAnswer(word) {
@@ -75,10 +204,10 @@
 
         function handleWrongAnswer(word) {
             stats.wrong++;
-            // 将错词添加到队列末尾（确保不会重复添加）
+            // 将错词添加到队列末尾（去重处理）
             if (!wrongWords.some(w => w.word === word.word)) {
-                wrongWords.push(word);
-                currentTest.push(JSON.parse(JSON.stringify(word))); // 深拷贝避免污染原数据
+                wrongWords.push({...word});
+                currentTest.push({...word});
             }
         }
 
@@ -100,11 +229,29 @@
             }
         }
 
-        // 初始化部分保持不变，注意更新totalTestCount显示
-        function startTest() {
-            // ...其他初始化代码...
-            document.getElementById('totalTestCount').textContent = currentTest.length;
+        function updateStats() {
+            document.getElementById('current').textContent = currentIndex + 1;
+            document.getElementById('right').textContent = stats.right;
+            document.getElementById('wrong').textContent = stats.wrong;
+            document.getElementById('acc').textContent = stats.acc;
         }
+
+        function showFinalResult() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            document.getElementById('testArea').innerHTML = `
+                <div style="text-align: center; margin-top: 50px">
+                    <h2>测试完成！</h2>
+                    <p>总耗时：${elapsed}秒</p>
+                    <p>正确数：${stats.right}</p>
+                    <p>错误数：${stats.wrong}</p>
+                    <p>准确率：${stats.acc}%</p>
+                    <button onclick="location.reload()">重新开始</button>
+                </div>
+            `;
+        }
+
+        loadData();
+        document.getElementById('startButton').addEventListener('click', startTest);
     </script>
 </body>
 </html>
